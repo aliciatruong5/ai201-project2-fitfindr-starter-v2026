@@ -40,8 +40,7 @@
 ## What This Does
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
-
-
+FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee under $30") and searches thrift listings for matches on description, size, and price. If it finds a match, it suggests an outfit pairing using the user's existing wardrobe, then writes a short caption-style "fit card" describing the find, its price, and platform. If nothing matches the search, the agent stops and reports why instead of continuing with no item.
 
 ---
 
