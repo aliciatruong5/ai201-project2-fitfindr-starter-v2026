@@ -221,13 +221,19 @@ $ python -c "from pprint import pprint; from tools import search_listings; pprin
 ```
 $ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[1], get_example_wardrobe()))"
 
-Pair the Y2K butterfly tee with your baggy dark-wash straight-leg jeans and chunky white sneakers for a classic, nostalgic 2000s street style look. Layer your black cropped zip hoodie over top on cooler days, accessorizing with your black crossbody bag.
+Pair the Y2K butterfly tee with your baggy dark-wash straight-leg 
+jeans and chunky white sneakers for a classic, nostalgic 2000s 
+street style look. Layer your black cropped zip hoodie over top 
+on cooler days, accessorizing with your black crossbody bag.
 ```
 
 ```
 $ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
 
-Scored these vintage Levi's 501 jeans for just $38.0 on Depop, and the medium wash is absolute perfection. They're giving effortless off-duty model when I pair them with my crisp white sneakers. Seriously never taking these off.
+Scored these vintage Levi's 501 jeans for just $38.0 on Depop, 
+and the medium wash is absolute perfection. They're giving 
+effortless off-duty model when I pair them with my crisp white 
+sneakers. Seriously never taking these off.
 ```
 
 ---
