@@ -58,24 +58,24 @@ FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee unde
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Filters the listings data by price ceiling and size (whole-token match, so a query for size "M" doesn't match inside "XL" or "US 9"), then scores what's left by keyword overlap between the description and each listing's title/description/category/style_tags.
+- **Inputs:** `description` (str), `size` (str or None), `max_price` (float or None)
+- **Returns:** A list of listing dicts (`id`, `title`, `description`, `category`, `style_tags`, `size`, `condition`, `price`, `colors`, `brand`, `platform`), highest keyword-overlap score first, capped at `config.SEARCH_RESULT_LIMIT`.
+- **When it has nothing:** Returns `[]` — an empty list — when nothing passes the price/size filters, or nothing scores above zero on keyword overlap.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Calls the model to suggest one or two outfits pairing a thrifted item with pieces from the user's wardrobe.
+- **Inputs:** `new_item` (dict — a listing), `wardrobe` (dict with an `'items'` key holding a list of wardrobe item dicts)
+- **Returns:** A non-empty string, 2-3 sentences, naming specific wardrobe pieces by name in the pairing.
+- **When it has nothing:** If `wardrobe['items']` is empty, it asks the model for general styling advice for the item instead of pairing it with pieces that don't exist — still a non-empty string, never `""`.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Calls the model to write a short, social-post-style caption about the find, built from the item's details and the outfit suggestion.
+- **Inputs:** `outfit` (str — the output of `suggest_outfit`), `new_item` (dict — a listing)
+- **Returns:** A non-empty string, 2-4 sentences, mentioning the item, its price, and its platform exactly once each.
+- **When it has nothing:** If `outfit` is empty or whitespace-only, returns a descriptive fallback message (naming the item, price, and platform) instead of calling the model or raising.
 
 ---
 
