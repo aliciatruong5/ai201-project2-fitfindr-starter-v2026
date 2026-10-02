@@ -44,40 +44,30 @@ Given a query that matches no listings, the agent stops before calling
 
 ## 3. Something about state
 
-<!-- YOU WRITE THIS ONE.
+Given a matching query, `session["selected_item"]["id"]` is the same `id` as
+the item dict passed into `suggest_outfit` — checked across 5 of 5 tries.
 
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** `search_listings` and `suggest_outfit` are separate
+functions joined only by the session dict — nothing stops a bug from putting
+one item in `selected_item` and a different one into the call. Since
+`run_agent` always picks `search_results[0]`, the id should match every single
+time; any mismatch is a wiring bug, not a flaky search, so 5 of 5 is the right
+bar.
 
 ---
 
 ## 4. Something about the fit card
 
-<!-- YOU WRITE THIS ONE.
+For 5 different items run through `create_fit_card`, each resulting caption
+mentions that item's price and platform — checked across all 5, not just
+most.
 
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
-
-**Why this target:**
+**Why this target:** The wording will vary every time (`TEMPERATURE` is 0.9 on
+purpose), so I can't check for exact text. But the prompt explicitly asks the
+model to mention price and platform once each — if either is missing, that's
+the prompt or the tool failing, not normal model variation. 5 of 5 because
+this is a structural requirement I control via the prompt, not a wording
+quality I'm leaving to the model's judgment.
 
 
 
@@ -85,16 +75,15 @@ Given a query that matches no listings, the agent stops before calling
 
 ## 5. Your choice
 
-<!-- YOU WRITE THIS ONE TOO.
+Given a query with a `max_price`, every listing in `search_results` has
+`price <= max_price` — checked across 5 queries with different price
+ceilings, 0 violations allowed in any of them.
 
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
-
-**Why this target:**
+**Why this target:** The price filter in `search_listings` is a plain
+comparison, not something that depends on the model or on ambiguous keyword
+matching — there's no reasonable case where it should ever let a listing
+through over the ceiling. A single violation means the filter itself is
+broken, so the bar is 0 of however many results come back, every time.
 
 
 
