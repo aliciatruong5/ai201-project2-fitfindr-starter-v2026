@@ -112,8 +112,15 @@ FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee unde
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'vintage graphic tee under $30'
 
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Pair the Y2K baby tee with your baggy straight-leg dark wash jeans and chunky white sneakers for an effortless, nostalgic daytime look. Layer the black cropped zip hoodie over top and accessorize with your black crossbody bag to lean into that authentic turn-of-the-millennium aesthetic.
+
+  Fit card: Scored this absolute dream of a butterfly print baby tee on Depop for just $18 and I'm officially never taking it off. It's giving major 2000s mall-rat energy, especially paired with my favorite baggy jeans and chunky sneakers. Pure Y2K perfection!
+
+2 model calls this session, 374 prompt + 121 output tokens
 ```
 
 **The three tools, tested one at a time**
@@ -121,16 +128,19 @@ $ python app.py ask '...'
 ```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
 
+[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'description': 'Super cute early 2000s baby tee with butterfly graphic. Fitted crop length. Tag says medium but fits like a small.', 'category': 'tops', 'style_tags': ['y2k', 'vintage', 'graphic tee', 'cottagecore'], 'size': 'S/M', 'condition': 'excellent', 'price': 18.0, 'colors': ['white', 'pink', 'purple'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'description': 'Vintage-style bootleg tee with faded graphic. Slightly boxy fit. 100% cotton, soft and worn-in.', 'category': 'tops', 'style_tags': ['graphic tee', 'vintage', 'grunge', 'streetwear', 'band tee'], 'size': 'L', 'condition': 'good', 'price': 24.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'description': 'Sheer black mesh long-sleeve. Great for layering under a graphic tee or over a bralette. Stretchy material, fits true to size.', 'category': 'tops', 'style_tags': ['y2k', 'grunge', 'goth', 'layering'], 'size': 'S/M', 'condition': 'excellent', 'price': 15.0, 'colors': ['black'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'description': 'Faded grey band-style tee with distressed graphic. Crew neck. Fits boxy. Well-loved but no holes or major damage.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'band tee', 'graphic tee', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 19.0, 'colors': ['grey', 'charcoal'], 'brand': None, 'platform': 'depop'}, {'id': 'lst_011', 'title': 'Low-Rise Cargo Pants — Khaki', 'description': 'Y2K era low-rise cargo pants. Lots of pockets. Khaki color, slightly distressed at the hems. Great for layering with a long tee.', 'category': 'bottoms', 'style_tags': ['y2k', 'cargo', '2000s', 'streetwear'], 'size': 'W29', 'condition': 'fair', 'price': 27.0, 'colors': ['khaki', 'tan'], 'brand': None, 'platform': 'poshmark'}, {'id': 'lst_012', 'title': 'Oversized Crewneck Sweatshirt — Vintage Navy', 'description': 'Perfectly faded navy crewneck. Genuinely vintage — not manufactured distressed. Ribbed cuffs and hem. No graphics, clean.', 'category': 'tops', 'style_tags': ['vintage', 'basics', 'oversized', 'classic'], 'size': 'XL (fits oversized)', 'condition': 'good', 'price': 20.0, 'colors': ['navy'], 'brand': None, 'platform': 'thredUp'}, {'id': 'lst_015', 'title': 'Vintage Graphic Hoodie — Faded Black', 'description': 'Faded black pullover hoodie with barely-visible vintage graphic on the chest. Cozy interior. Some pilling but adds to the worn-in look.', 'category': 'tops', 'style_tags': ['vintage', 'grunge', 'graphic', 'streetwear'], 'size': 'L', 'condition': 'fair', 'price': 26.0, 'colors': ['black', 'charcoal'], 'brand': None, 'platform': 'depop'}]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[1], get_example_wardrobe()))"
 
+Pair the Y2K butterfly tee with your baggy dark-wash straight-leg jeans and chunky white sneakers for a classic, nostalgic 2000s street style look. Layer your black cropped zip hoodie over top on cooler days, accessorizing with your black crossbody bag.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
 
+Scored these vintage Levi's 501 jeans for just $38.0 on Depop, and the medium wash is absolute perfection. They're giving effortless off-duty model when I pair them with my crisp white sneakers. Seriously never taking these off.
 ```
 
 ---
@@ -146,15 +156,15 @@ $ python -c "from tools import create_fit_card; ..."
 
 **Moment 1**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I asked Claude to help build the planning loop in `agent.py`, including `parse_query()` to pull `description`, `size`, and `max_price` out of a free-text query with regex.
+- *What came back:* The first version of `parse_query` stripped the `under $X` and `size Y` phrases out correctly, but on a query like "silk slip dress in midi length under $40" it left a dangling connector word (`"in"`) at the end of the description once the price phrase was removed.
+- *What I changed:* I had it add a cleanup step that strips a trailing `"in"` and stray punctuation after the size/price substrings are removed, and verified it against all six example queries in `app.py` before moving on.
 
 **Moment 2**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* I had Claude run `app.py ask` and each of the three tools from the terminal and paste the real output into the Sample Run section.
+- *What came back:* Its first draft of the `search_listings` test trimmed the long list of result dicts down to a summary with `...` in place of the full fields, to keep it readable.
+- *What I changed:* I had it replace that with the exact, unmodified output the command actually printed — the README is explicit that it wants pasted text matching what printed, not a cleaned-up summary, so a trimmed version wouldn't hold up.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
