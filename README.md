@@ -92,13 +92,13 @@ FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee unde
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` naming what to change (loosen the price, drop the size, use broader keywords) and stop — do not call `suggest_outfit`. Otherwise take the first result as `session["selected_item"]` and continue on to `suggest_outfit` and then `create_fit_card`.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regex, in `agent.py::parse_query`. One pattern pulls `under $X` into `max_price`, another pulls `size Y` into `size`, and whatever text is left (with leftover connector words like a trailing "in" cleaned up) becomes `description`.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** `parsed` (the dict from `parse_query`) → `search_results` (the full list from `search_listings`) → `selected_item` (the first of those) → `outfit_suggestion` (from `suggest_outfit`) → `fit_card` (from `create_fit_card`). `error` is set instead, and everything after it stays `None`, if the branch stops the run early.
 
 ---
 
