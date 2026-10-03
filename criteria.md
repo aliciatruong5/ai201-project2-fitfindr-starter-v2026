@@ -24,10 +24,14 @@ data earns credit; *"80% seemed reasonable"* does not.
 Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
-**Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+**Why this target:** `search_listings` scores on plain keyword overlap between
+the description and each listing's title/description/category/style_tags —
+there's no synonym handling or fuzzy matching, so a phrasing that doesn't
+share a literal word with anything in the data (e.g. "sweater" when the
+listing only says "crewneck") can come back empty even though a human would
+call it a match. That's a property of a simple keyword search, not a bug in
+the loop, so I'm leaving room for one miss out of five rather than claiming
+5 of 5.
 
 ---
 
@@ -36,9 +40,13 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
-**Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+**Why this target:** This path doesn't depend on keyword luck the way
+criterion 1 does — it only depends on the branch rule in `run_agent` checking
+whether `search_listings` returned an empty list, which is a plain `if` over
+code I control completely. There's no model call and no ambiguous matching
+involved in deciding to stop, so there's no realistic reason for this to work
+4 times and fail the 5th — a miss here would mean the branch itself is broken,
+not that the input was unlucky.
 
 ---
 
