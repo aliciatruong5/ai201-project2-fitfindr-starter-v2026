@@ -341,19 +341,50 @@ that produced it:
 **Happy path**
 
 ```
+$ python app.py ask 'vintage graphic tee under $30' --trace
 
+[1] parse_query
+      in:  vintage graphic tee under $30
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[3] suggest_outfit
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Pair the Y2K butterfly tee with the baggy dark-wash straight-leg jeans, chunky white sneakers, and the black c…
+[4] create_fit_card
+      in:  Pair the Y2K butterfly tee with the baggy dark-wash straight-leg jeans, chunky white sneakers, and the black c…
+      out: Found the holy grail of 2000s mall-goth nostalgia on Depop today for just $18. I am so obsessed with this litt…
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Pair the Y2K butterfly tee with the baggy dark-wash straight-leg jeans, chunky white sneakers, and the black crossbody bag for an effortless, classic 2000s street-style look. Alternatively, layer the baby tee under the black cropped zip hoodie paired with the wide-leg khaki trousers and black combat boots to lean into a grungier, mixed-aesthetic vibe.
+
+  Fit card: Found the holy grail of 2000s mall-goth nostalgia on Depop today for just $18. I am so obsessed with this little butterfly baby tee! Going to live in this exact piece all summer long. 🦋✨
+
+2 model calls this session, 395 prompt + 131 output tokens
 ```
 
 **Empty search**
 
 ```
+$ python app.py ask 'designer ballgown size XXS under $5' --trace
 
+[1] parse_query
+      in:  designer ballgown size XXS under $5
+      out: dict with keys: description, size, max_price
+[2] search_listings (via MCP)
+      in:  dict with keys: description, size, max_price
+      out: [] (empty)
+[3] branch
+      →    search_results empty — stopping before suggest_outfit
+
+  No listings matched that search. Try loosening the price ceiling, dropping the size filter, or using broader keywords.
+
+0 model calls this session
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** `agent.py` no longer imports `search_listings` directly from `tools.py` — it imports `call_tool` from `mcp_client.py` and calls `call_tool("search_listings", {...})` instead, with `mcp_server.py` registering that same function (described for a reader who can't see the code) behind the MCP protocol. The rewire worked cleanly: the trace line `[2] search_listings (via MCP)` shows it going out over MCP, and the return value came back as the identical list of dicts the direct call used to produce — same shape, same content, nothing downstream had to change.
 
 
 
