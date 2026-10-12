@@ -43,15 +43,41 @@ SCENARIOS = [
         "wardrobe": "example",
         "criterion": 3,
     },
+    # Criterion 4 needs 5 DIFFERENT items, not 5 tries of one query — a
+    # single scenario can't produce that. These five each target a different
+    # listing as the top search result, run with `--tries 1` so each
+    # contributes exactly one real item rather than five tries of itself.
+    # See "The Improvement" in the README for why this replaced the original
+    # single-scenario attempt.
     {
-        # Criterion 4 itself is tested separately, outside run_eval.py — it
-        # needs 5 DIFFERENT items, not 5 tries of the same query, and this
-        # harness only gives one query per criterion row. Kept here as a
-        # diagnostic rerun of the same item, not official evidence.
-        "name": "fit card mentions price and platform (diagnostic rerun)",
-        "query": "denim jacket under $50",
+        "name": "fit card item 1 of 5 — vintage jeans",
+        "query": "vintage levis 501 jeans under $50",
         "wardrobe": "example",
-        "criterion": None,
+        "criterion": 4,
+    },
+    {
+        "name": "fit card item 2 of 5 — y2k tee",
+        "query": "y2k baby tee butterfly",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        "name": "fit card item 3 of 5 — track jacket",
+        "query": "90s track jacket",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        "name": "fit card item 4 of 5 — platform sneakers",
+        "query": "platform sneakers",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    {
+        "name": "fit card item 5 of 5 — bucket hat",
+        "query": "bucket hat",
+        "wardrobe": "example",
+        "criterion": 4,
     },
     {
         # A query with a price ceiling loose enough to return several

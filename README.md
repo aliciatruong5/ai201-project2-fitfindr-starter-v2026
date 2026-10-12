@@ -442,21 +442,56 @@ $ python app.py ask 'designer ballgown size XXS under $5' --trace
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** I replaced the single "fit card mentions price and
+platform" scenario in `scenarios.py` with five separate scenarios — one per
+criterion-4 item — each carrying a query chosen so a different listing
+(`lst_001`, `lst_002`, `lst_004`, `lst_019`, `lst_034`) comes back as
+`search_results[0]`. `run_eval.py` itself didn't need to change: it already
+groups rows by criterion number, so five scenarios tagged `"criterion": 4`
+just become five rows under criterion 4 instead of a workaround script
+outside the graded evidence trail.
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** Criterion 4's MISSED verdict in the
+Before run — not a tool or loop bug, but the harness having no way to put 5
+different items under one criterion with the single-scenario, five-tries
+shape everything else used.
 
 ### Run Log — After
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 2. impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 3. selected item reaches suggest_outfit unchanged | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 4. fit card mentions price and platform, 5 different items | 5 of 5 | PASS (lst_001) | PASS (lst_002) | PASS (lst_004) | PASS (lst_019) | PASS (lst_034) | 5/5 — MET |
+| 5. price ceiling respected | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
 
-**Did it help, and how do I know:**
+Full output: [`results/run_2026-10-12_1406_after.md`](results/run_2026-10-12_1406_after.md),
+produced by `python run_eval.py --label after`. Criterion 4's "Try" columns
+here are its five scenario rows (one real item each), not five tries of one
+scenario — `lst_001` a $38 Depop find, `lst_002` an $18 Depop tee, `lst_004` a
+$45 Poshmark jacket, `lst_019` a $48 Poshmark sneaker, `lst_034` a $14 thredUp
+hat — and every resulting caption named that item's own price and platform:
+
+```
+tools.py::create_fit_card — lst_019, "Platform Sneakers — White Chunky Sole"
+($48.0, poshmark)
+
+Scored these chunky white platform sneakers on Poshmark for just $48, and
+they are giving major Y2K off-duty model energy. Can't wait to style them
+with baggy dark-wash denim and a little ribbed tank for the ultimate
+effortless street style look.
+```
+
+**Did it help, and how do I know:** Yes. Criterion 4 went from MISSED (no
+measurable row at all) to MET (5/5), and I know because the evidence now
+sits in `results/run_2026-10-12_1406_after.md` in exactly the shape the
+other four criteria's evidence takes — five rows, each one a real tool
+call, each one checkable without a side script. Criteria 1, 2, 3, and 5
+didn't move — they were already MET before, and they're still MET after,
+which is what I'd expect since nothing about `parse_query`, the branch, or
+the price filter changed. The improvement was entirely in how criterion 4
+gets measured, not in the agent's behavior.
 
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
@@ -471,6 +506,23 @@ $ python app.py ask 'designer ballgown size XXS under $5' --trace
      you did. "I ran out of time" is fine if it's true. Pretending nothing is
      left is not. -->
 
+All five criteria are MET, so nothing here is a missed criterion — these are
+gaps I can see but didn't need to fix to hit this unit's targets.
+
+**Criterion 1's 4-of-5 target is untested.** Both runs hit the same item 5/5
+on one query — that tests the model's wording variation, not the search's.
+I never ran differently-phrased queries (e.g. "worn-in denim" vs. "vintage
+jeans") to find where keyword overlap actually misses, so the target is a
+guess, not something I've seen fail.
+
+**`ModelUnavailable` isn't caught around `search_listings`.** It goes
+through MCP now, not `generate()`, so a bad key there would surface as an
+uncaught `MCPError` instead. I only tested the failure on `suggest_outfit`.
+
+**`parse_query` is only proven on ~9 phrasings.** It's regex over free text —
+an unusual phrasing ("around fifty dollars") would likely misparse silently
+rather than fail loudly. None of my five criteria exercised this, so it's
+untested.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
