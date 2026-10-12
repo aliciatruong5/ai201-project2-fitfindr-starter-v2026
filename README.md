@@ -279,17 +279,41 @@ sneakers. Seriously never taking these off.
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 2. impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 3. selected item reaches suggest_outfit unchanged | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+| 4. fit card mentions price and platform, 5 different items | 5 of 5 | — | — | — | — | — | **MISSED — not measurable with this harness** |
+| 5. price ceiling respected | 5 of 5 | PASS | PASS | PASS | PASS | PASS | 5/5 — MET |
+
+Criteria 1, 2, 3, and 5 came from `python run_eval.py --label before`, one
+scenario per criterion in `scenarios.py`, five tries each. Full output for
+every try is in
+[`results/run_2026-10-12_1351_before.md`](results/run_2026-10-12_1351_before.md).
+
+Criterion 4 is marked MISSED here for a different reason than 1-3 and 5 ever
+could be: it names 5 *different* items, but `run_eval.py` runs one scenario
+(one query) five times under one criterion row, not five different queries.
+There's no way to produce "5 different items, one row" from the harness as
+built — the criterion can't be measured by the tool meant to measure it, not
+that the behavior failed. (I did also run it directly outside `run_eval.py` —
+5 different listings through `create_fit_card`, each caption checked for
+price and platform — and all 5 passed. That's informal evidence the
+*behavior* is fine; it just isn't the evidence this harness produces, so the
+row stands as MISSED until that's fixed properly.)
 
 **Real output from one try**, pasted as text, naming the file and function
 that produced it:
 
 ```
+tools.py::create_fit_card — lst_004, "90s Track Jacket — Navy/White Stripe"
+($45.0, poshmark)
 
+Scored this vintage 90s Champion track jacket on Poshmark for just $45, and
+the navy and white stripes give off the ultimate retro trackstar energy. I'm
+thinking oversized baggy denim and chunky white sneakers for the full
+effortless streetwear vibe. Absolute secondhand win!
+
+mentions price: True, mentions platform: True
 ```
 
 ---
@@ -314,13 +338,34 @@ that produced it:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | Matching query completes all three tools | 4 of 5 | MET (5/5) | All 5 tries of `vintage graphic tee under $30` returned a non-empty `fit_card` with `error` still `None`. |
+| 2 | Impossible query stops before the second tool | 5 of 5 | MET (5/5) | All 5 tries of `designer ballgown size XXS under $5` set `session["error"]` and left `outfit_suggestion`/`fit_card` at `None`, confirmed by the trace stopping at step `[3] branch`. |
+| 3 | Selected item reaches suggest_outfit unchanged | 5 of 5 | MET (5/5) | All 5 tries showed the same item (`90s Track Jacket — Navy/White Stripe`, id `lst_004`) in the `[2] search_listings` output and as the `in:` value of `[3] suggest_outfit` — same id, every try. |
+| 4 | Fit card mentions price and platform, 5 different items | 5 of 5 | **MISSED** | `run_eval.py` runs one scenario (one query) five times per criterion row — it has no way to put 5 *different* items under a single row, which is what the criterion actually asks for. The row can't be filled in from `results/`, so it's MISSED as a harness gap, not a behavior failure. |
+| 5 | Price ceiling respected | 5 of 5 | MET (5/5) | Checked every listing in `search_results` for `vintage under $50` against `price <= 50` — 0 violations across 10 results, identical on all 5 tries since the filter has no model call to vary it. |
 
 **Diagnoses**
+
+Criteria 1, 2, 3, and 5 all MET. That's worth being honest about rather than
+inventing a problem: criteria 2, 3, and 5 test deterministic code
+(`parse_query`, the branch in `run_agent`, and the price filter in
+`search_listings`), so there was never much room for them to fail once the
+tools were written correctly. Criterion 1 is the one that touches the model
+and search scoring, and it held up too, but with less margin — a
+keyword-overlap search is exactly where I'd expect a miss to show up first
+across a larger batch of queries.
+
+Criterion 4 MISSED, and the mechanism is specific: it's not a tool, a loop
+branch, or a session-state bug — it's that `scenarios.py` + `run_eval.py`
+test *one query, five tries* per criterion, and criterion 4 is written
+around *five different items*. Those are different shapes of evidence, and
+the harness only produces one of them. I confirmed the underlying behavior
+is actually fine (ran `create_fit_card` on 5 different listings directly,
+all 5 captions had price and platform), but that confirmation lives outside
+`results/`, so it doesn't count as this unit's evidence. The real fix is
+Milestone 4's problem: either write a small script that produces this
+evidence properly, or revise the criterion so it fits the harness that
+exists.
 
 
 
