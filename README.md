@@ -503,114 +503,25 @@ gets measured, not in the agent's behavior.
 <!-- If it made things worse, say that. Honestly reported, that earns full
      credit and is more interesting than one that worked. -->
 
-
-
 ---
 
-## Extension — `price_check`
+## Capstone
 
-**What I added:** A fourth tool, `tools.py::price_check`, that tells the user whether the item the agent found is cheap, typical, or pricey for its category. `agent.py::run_agent` calls it right after it picks `selected_item` (step 3 in the trace), stores the result in `session["price_check"]`, and `app.py ask` prints it as a `Price:` line. The empty-search branch is unchanged, so it stops before the new tool runs. The contract is in the Tool Inventory above.
+**What This Extends**
 
-**Why this one:** It is small and deterministic, so I can check its numbers by hand, and it uses data the agent already has. The "typical" band is 15% either side of the category average. I chose that by eye, and it is not tuned on anything.
+FitFindr, the second of my four systems. The new capability is a fourth tool, `price_check`, which tells the user whether the item the agent found is cheap, typical, or pricey for its category. It is wired into the existing planning loop right after the item is selected, so a run is now parse, search, price check, outfit, fit card. To run and observe it I also added structured request logging to `serve.py`. The tool is documented in the Tool Inventory above, its five acceptance criteria are criteria 6 to 10 in `criteria.md`, and its eval run is `results/run_2026-11-11_1635_extension.md`.
 
-**Evidence that it does what I claim**
+**The Shape**
 
-The tool on its own, on four real listings and one made-up category:
+C: extend one capability of a system that already works, here by adding a fourth tool. The three existing tools, the loop's branch rule and criteria 1 to 5 were left as they were. Out of scope: a second retrieval strategy, feeding the price verdict into the outfit or fit card prompts, price data from outside the 40 listings, deploying it to a host, and any front end.
 
-```
-$ python -c "from tools import price_check; from utils.data_loader import load_listings; L={l['id']:l for l in load_listings()}; [print(i, L[i]['title'], L[i]['price'], price_check(L[i])) for i in ('lst_002','lst_022','lst_004','lst_001')]"
+**Running It**
 
-lst_002 Y2K Baby Tee — Butterfly Print 18.0
-{'category': 'tops', 'category_average': 22.0, 'comparable_count': 14, 'percent_vs_average': -18.2, 'price': 18.0, 'verdict': 'below typical'}
-lst_022 90s Leather Bomber — Black 75.0
-{'category': 'outerwear', 'category_average': 39.57, 'comparable_count': 7, 'percent_vs_average': 89.5, 'price': 75.0, 'verdict': 'above typical'}
-lst_004 90s Track Jacket — Navy/White Stripe 45.0
-{'category': 'outerwear', 'category_average': 43.86, 'comparable_count': 7, 'percent_vs_average': 2.6, 'price': 45.0, 'verdict': 'about typical'}
-lst_001 Vintage Levi's 501 Jeans — Medium Wash 38.0
-{'category': 'bottoms', 'category_average': 28.44, 'comparable_count': 9, 'percent_vs_average': 33.6, 'price': 38.0, 'verdict': 'above typical'}
-```
+Locally, with one command: `PORT=5001 python serve.py`. There is no deployed URL. The command, how I got to it from a clean checkout, and the environment (Python 3.13.13, the pinned packages, no model files, a Gemini key and internet) are in [RUNNING.md](RUNNING.md#the-run-path), and the real session that came out of it is pasted under **Instrumentation** below.
 
-I checked the first by hand: the 14 other tops in `data/listings.json` sum to 308, and 308 / 14 = 22.0, so $18 is 18.2% under. All three verdicts were reached. The empty case, a listing in a category nobody else is in (`category` set to `"hats"`), returned `comparable_count` 0, both averages `None`, and verdict `"no comparison available"`, not an error.
+**Instrumentation**
 
-In the loop, on a query that matches:
-
-```
-$ python app.py ask 'vintage graphic tee under $30' --trace
-
-[1] parse_query
-[2] search_listings (via MCP)
-      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
-[3] price_check
-      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
-      out: dict with keys: category, price, comparable_count, category_average, percent_vs_average, verdict
-[4] suggest_outfit
-[5] create_fit_card
-
-  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
-  Price:    below typical for tops — 18% under the $22.00 average
-```
-
-On a query that matches nothing, the run is the same length as before and the new tool never runs:
-
-```
-$ python app.py ask 'designer ballgown size XXS under $5' --trace
-
-[1] parse_query
-[2] search_listings (via MCP)
-      out: [] (empty)
-[3] branch
-      →    search_results empty — stopping before suggest_outfit
-```
-
-Nothing that already worked broke. `python test.py` passed 10 of 10, and I re-ran the whole five-criteria eval with the new tool in the loop (`results/run_2026-11-11_1635_extension.md`, 10 scenarios × 5 tries). `price_check` ran on all 45 tries that completed and on none of the 5 impossible-query tries. Every one of those 5 stopped early, and the other 45 completed. The run file leaves its Verdict column blank, so I counted completions from the trace; I did not re-score the criteria in this table.
-
-**What this does not show:** `price_check` only compares against the 40 listings in `data/listings.json`, so the "typical" price is typical for this data, not for the market. Shoes (4 listings) and accessories (3) are small groups, so their averages move a lot when one listing changes. The fit card and outfit prompts do not use the price verdict. It is shown to the user and nothing more.
-
----
-
-## The Run Path
-
-**There is no URL.** FitFindr is not deployed. It runs on my machine, and the path to it is a start command and the environment it needs, both of which I tested from a clean copy of the project on 2026-11-17.
-
-**How it gets there, from a fresh checkout:**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # then replace your_key_here with a Gemini key
-PORT=5001 python serve.py       # the start command
-```
-
-It then answers at `http://localhost:5001`: `POST /ask` with `{"query": "..."}` runs the agent, and `GET /health` returns `{"status": "ok"}`.
-
-**What it needs:**
-
-| Need | Detail |
-|---|---|
-| Python | 3.11 to 3.13 (not 3.14). Tested on 3.13.13 |
-| Packages | From `requirements.txt`; the versions that installed were python-dotenv 1.1.1, google-genai 1.75.0, mcp 1.30.0, Flask 3.1.3, gunicorn 23.0.0 |
-| Model files | None. `gemini-3.5-flash-lite` runs on Google's servers; nothing is downloaded and the virtualenv is 74 MB |
-| Key and network | `GEMINI_API_KEY` in `.env` (never committed) and internet access |
-| Port | The `PORT` variable. On a Mac, port 5000 is taken by AirPlay Receiver, so `PORT=5001` is needed there |
-
-The same steps with the log fields explained are in [RUNNING.md](RUNNING.md#run-it-locally-with-logs), and the real session that came out of it is under **Local Run** below.
-
----
-
-## Local Run
-
-**Start command** (full steps and what each log field means are in [RUNNING.md](RUNNING.md#run-it-locally-with-logs)):
-
-```bash
-PORT=5001 python serve.py
-```
-
-I tested it from a clean copy of the project: a new directory, a new virtualenv, `pip install -r requirements.txt`, `python test.py` (10 passed, 0 failed), then the command above. Two things that test turned up. On a Mac, `python serve.py` alone fails with "Address already in use", because AirPlay Receiver holds port 5000, which is why the command sets `PORT=5001`. And `.env.example` was missing from the repo (my commit `ab9799f` deleted it), so the `cp .env.example .env` step in RUNNING.md failed until I restored it.
-
-**Environment:** Python 3.13.13 (3.11 to 3.13 supported, not 3.14). The pinned dependencies installed as python-dotenv 1.1.1, google-genai 1.75.0, mcp 1.30.0, Flask 3.1.3 and gunicorn 23.0.0. There are no model files: the model (`gemini-3.5-flash-lite`) runs on Google's servers, so nothing is downloaded, and the whole virtualenv is 74 MB. It needs internet and `GEMINI_API_KEY`.
-
-**Run record.** A real session against that clean copy: one query that matches, one that matches nothing, a request with no `query`, a size-filtered query, and two requests sent at the same moment. The raw file is committed as `results/serve_run_2026-11-17.jsonl` and is pasted here unedited:
+Every `/ask` request writes one JSON line to stderr and to `logs/serve.jsonl`. A record holds `ts`, `request_id`, `request_number`, `query`, `wardrobe`, `wait_ms`, `run_ms`, `total_ms` (the wait is time queued behind another request, the run is time in the agent), `model_calls`, `prompt_tokens`, `output_tokens`, `outcome` (`completed`, `no_match`, `bad_request` or `error`), `status`, `error`, `results`, `selected_item` and `price_verdict`. A bad request logs only the fields it has. Each log line is a start record or one request, so the committed record `results/serve_run_2026-11-17.jsonl` has 8 lines: 6 requests and 2 start records. The second start record, on port 5000, is from my test of the default port, which then failed because macOS AirPlay already holds 5000; it is not a request. They are pasted unedited below and are also committed as `results/serve_run_2026-11-17.jsonl`. The session covers a match, a no-match, a bad request, a size-filtered query, and two overlapping requests where the second shows `wait_ms` 1973. That is 8 lines, and 6 of them are real requests, which is fewer than the ten entries this section asks for; I did not run a longer session.
 
 ```json
 {"ts": "2026-11-17T19:40:50.804+00:00", "event": "start", "port": 5001, "debug": false, "python": "3.13.13", "model": "gemini-3.5-flash-lite"}
@@ -623,36 +534,63 @@ I tested it from a clean copy of the project: a new directory, a new virtualenv,
 {"ts": "2026-11-17T19:41:39.742+00:00", "event": "start", "port": 5000, "debug": false, "python": "3.13.13", "model": "gemini-3.5-flash-lite"}
 ```
 
-How to read it: request 1 completed with two model calls (the outfit and the fit card), picked `lst_002`, and `price_check` called it below typical. Request 2 matched nothing and made zero model calls, so `no_match` is also the cheapest outcome. The bad request logged a 400 with no model call and no request number, because it never reached the agent. The last two are the overlap: "denim jacket" ran immediately (`wait_ms` 0) and "silk slip dress" arrived half a second later and waited 1,973 ms for its turn, then ran for 4,570 ms, for 6,543 ms in total. That is the one-at-a-time lock in `serve.py` working, and the queue message printed once on the terminal.
+**What It Costs**
 
-What the log does not show: every request used the example wardrobe, so the `custom` wardrobe path was never exercised. All six agent runs succeeded, so there is no `error` outcome (an HTTP 500) in the record. The first request (2,987 ms) was no slower than the later completed ones (2,488 to 3,181 ms), so this run shows no cold-start cost.
+Measured from the log, not estimated: the 4 requests in the record that ran the full loop used 388, 387, 382 and 417 prompt tokens and 139, 139, 130 and 166 output tokens (two model calls each: the outfit and the fit card). The mean is 393.5 prompt and 143.5 output tokens per completed run. A search that matches nothing made no model call and cost 0. The tokens were counted by `generate.py` from what the service reported, in a fresh checkout with an empty cache, so none were served from cache.
+
+At $0.30 per million input tokens and $2.50 per million output tokens for `gemini-3.5-flash-lite`, one completed run costs (393.5 × 0.30 + 143.5 × 2.50) / 1,000,000 = about $0.00048. A hundred runs a day is about $0.048 a day, or $1.43 over 30 days, if every one of them completes. Four runs is a small sample, and `price_check` adds no tokens because it makes no model call.
+
+**Run Log and Verdicts**
+
+Criteria 1 to 5 (the original five) were run with `run_eval.py`, five tries each, with the extension in the loop, in `results/run_2026-11-11_1635_extension.md`: 10 scenarios, 50 tries, 45 completed all the tools and the 5 impossible-query tries all stopped early, with `price_check` running on all 45 and none of the 5. Those runs are earlier than this section and are five tries, not three trials. Criteria 6 to 10 (for `price_check`) were each checked once, on 2026-11-17:
+
+| Criterion | Target | Result | Verdict |
+|---|---|---|---|
+| 6. Averages and verdicts match the data | 6 of 6 | 6 of 6, including the two listings nearest the 15% line | MET |
+| 7. No-comparison category never raises | 3 of 3 | 3 of 3 | MET |
+| 8. Leaves the item alone, no model calls, under 10 ms | 5 of 5 | 5 of 5; slowest 0.13 ms | MET |
+| 9. In the loop, runs exactly when it should | 10 of 10 | 10 of 10 | MET |
+| 10. Every listing gets one consistent verdict | 40 of 40, 3 verdicts | 40 of 40; 13 below, 15 typical, 12 above | MET |
+
+No criterion was missed, so there is no stage or mechanism to diagnose. I did not run these three times as the section asks. The tool has no model and no randomness, so I would expect repeats to match, but only criterion 9 touches the model, and I have not shown that.
+
+**The Improvement**
+
+The extension had no miss to fix, so I made no change to it. The most recent measured improvement in this repo is the earlier one, in **The Improvement** above, which changed how criterion 4 is measured. I do not have a second run log for the capstone.
+
+**What's Still Broken**
+
+All five `price_check` criteria (6 to 10) are met, so there is no missed criterion to fix. What is left is gaps I can see but did not close. For each: what I would do, and why I stopped.
+
+- **`serve.py` and malformed bodies.** I would send it `{"query": 123}`, a body that is a JSON list, and a `wardrobe` that is a string, and make each return a 400 with a logged line. I suspect the first two raise before the request is logged and come back as a bare 500, but I never tried it. I stopped because it is a suspicion, not a finding, and I ran out of time to test it.
+- **"Typical" only means typical for these 40 listings.** Shoes (4 listings) and accessories (3) give shaky averages. I would compare against more data, or narrow the comparison by condition as well as category. I stopped because the project's data is all there is to compare against; I have no source of real market prices.
+- **The 15% band is my choice.** I would set it from the spread of prices in each category instead of one fixed number. I stopped because there is nothing to tune it against, and a band picked to fit these 40 listings would just fit noise.
+- **The price verdict is only printed.** The outfit and fit card prompts do not use it. I would add it to the fit card prompt and check, as criterion 4 does, that the card still mentions price and platform exactly once. I stopped because this extension was meant to be one tool, and changing a prompt is a second change.
+- **Two paths were never exercised in the log:** a custom wardrobe, and an HTTP 500. I would send one of each through `serve.py` and add them to the record. I stopped at the six requests I had.
+- **Criterion 1's 4-of-5 target is untested against the search.** Both runs hit the same item 5 of 5 on one query, which tests the model's wording variation and not the search's. I would run five differently phrased queries (for example "worn-in denim" against "vintage jeans") to find where keyword overlap misses. I stopped because deciding what counts as a match for a loosely phrased query is a judgment I had not made.
+- **`ModelUnavailable` is not caught around `search_listings`.** It goes through MCP, so a bad key there would surface as an uncaught `MCPError`. I would catch it in `run_agent` and set `session["error"]`. I stopped because I had only tested the failure on `suggest_outfit`.
+- **`parse_query` is only proven on about 9 phrasings.** An unusual phrasing ("around fifty dollars") would likely misparse silently. I would add the phrasings I can think of as tests. I stopped because none of my criteria exercise it.
+
+**The one thing I'd do first:** test `serve.py` with a malformed body. It is the one gap in something a user could actually hit, the check takes a few minutes, and I do not yet know whether it is a real bug.
+
+**The target I'd tighten:** criterion 8's time limit, from 10 ms to 1 ms. The slowest call measured 0.13 ms, so 10 ms leaves about 75 times the headroom, and a slow bug such as re-reading the data file on every call would still pass. I would first confirm that the very first call after startup, which has to read the file, also stays under 1 ms, since I only measured warm calls.
+
+**How I Used AI**
+
+*Moment 1: the fourth tool*
+
+- *What I asked for:* Help extending one capability of the working system by adding a fourth tool.
+- *What came back:* `price_check`, which compares a listing's price with the average of the other listings in its category and says whether it is below, about, or above typical. It wrote the function in `tools.py`, called it from `agent.py::run_agent` right after the item is selected, and added a `Price:` line to `app.py ask`. It checked the first result against `data/listings.json` by hand (the 14 other tops sum to 308, and 308 / 14 = 22.0) and ran all three verdicts plus the empty case.
+- *What I changed:* The first version printed "below typical for tops — -18% vs the $22.00 average", which read badly, so I had the wording changed to "18% under the $22.00 average".
+
+*Moment 2: running it locally with logs*
+
+- *What I asked for:* Run the tool locally with logs, and test the start command from a clean copy of the project.
+- *What came back:* Structured request logging in `serve.py` and a real six-request session. The clean-copy test found two things I would have missed: `python serve.py` fails on my Mac because AirPlay holds port 5000, and `cp .env.example .env` failed because my own commit `ab9799f` had deleted `.env.example`.
+- *What I changed:* I had the command changed to `PORT=5001 python serve.py` and documented why, and I had `.env.example` restored from the commit before it (it holds only a placeholder key). Each went into its own commit.
+
 
 ---
-
-## What's Still Broken
-
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
-
-All five criteria are MET, so nothing here is a missed criterion — these are
-gaps I can see but didn't need to fix to hit this unit's targets.
-
-**Criterion 1's 4-of-5 target is untested.** Both runs hit the same item 5/5
-on one query — that tests the model's wording variation, not the search's.
-I never ran differently-phrased queries (e.g. "worn-in denim" vs. "vintage
-jeans") to find where keyword overlap actually misses, so the target is a
-guess, not something I've seen fail.
-
-**`ModelUnavailable` isn't caught around `search_listings`.** It goes
-through MCP now, not `generate()`, so a bad key there would surface as an
-uncaught `MCPError` instead. I only tested the failure on `suggest_outfit`.
-
-**`parse_query` is only proven on ~9 phrasings.** It's regex over free text —
-an unusual phrasing ("around fifty dollars") would likely misparse silently
-rather than fail loudly. None of my five criteria exercised this, so it's
-untested.
-
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
