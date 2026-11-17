@@ -77,6 +77,13 @@ FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee unde
 - **Returns:** A non-empty string, 2-4 sentences, mentioning the item, its price, and its platform exactly once each.
 - **When it has nothing:** If `outfit` is empty or whitespace-only, returns a descriptive fallback message (naming the item, price, and platform) instead of calling the model or raising.
 
+### `price_check` (fourth tool, added as the extension)
+
+- **What it does:** Compares a listing's price with the average price of every *other* listing in the same category (tops, bottoms, outerwear, shoes, accessories) and says whether it is cheap, typical, or pricey. No model call.
+- **Inputs:** `new_item` (dict — a listing; needs `id`, `category`, `price`)
+- **Returns:** A dict: `category` (str), `price` (float), `comparable_count` (int), `category_average` (float, 2 decimals), `percent_vs_average` (float, signed, 1 decimal), and `verdict` (str): `"below typical"`, `"about typical"` (within 15% of the average), or `"above typical"`.
+- **When it has nothing:** If no other listing shares the category, it still returns a dict, with `comparable_count` 0, `category_average` and `percent_vs_average` set to `None`, and `verdict` `"no comparison available"`. Never `None`, never an exception.
+
 ---
 
 ## Planning Loop
@@ -98,7 +105,7 @@ FitFindr takes a plain-language shopping request (e.g. "vintage graphic tee unde
 
 **How the query is parsed:** Regex, in `agent.py::parse_query`. One pattern pulls `under $X` into `max_price`, another pulls `size Y` into `size`, and whatever text is left (with leftover connector words like a trailing "in" cleaned up) becomes `description`.
 
-**What moves through the session:** `parsed` (the dict from `parse_query`) → `search_results` (the full list from `search_listings`) → `selected_item` (the first of those) → `outfit_suggestion` (from `suggest_outfit`) → `fit_card` (from `create_fit_card`). `error` is set instead, and everything after it stays `None`, if the branch stops the run early.
+**What moves through the session:** `parsed` (the dict from `parse_query`) → `search_results` (the full list from `search_listings`) → `selected_item` (the first of those) → `price_check` (from `price_check`) → `outfit_suggestion` (from `suggest_outfit`) → `fit_card` (from `create_fit_card`). `error` is set instead, and everything after it stays `None`, if the branch stops the run early.
 
 ---
 
@@ -497,6 +504,67 @@ gets measured, not in the agent's behavior.
      credit and is more interesting than one that worked. -->
 
 
+
+---
+
+## Extension — `price_check`
+
+**What I added:** A fourth tool, `tools.py::price_check`, that tells the user whether the item the agent found is cheap, typical, or pricey for its category. `agent.py::run_agent` calls it right after it picks `selected_item` (step 3 in the trace), stores the result in `session["price_check"]`, and `app.py ask` prints it as a `Price:` line. The empty-search branch is unchanged, so it stops before the new tool runs. The contract is in the Tool Inventory above.
+
+**Why this one:** It is small and deterministic, so I can check its numbers by hand, and it uses data the agent already has. The "typical" band is 15% either side of the category average. I chose that by eye, and it is not tuned on anything.
+
+**Evidence that it does what I claim**
+
+The tool on its own, on four real listings and one made-up category:
+
+```
+$ python -c "from tools import price_check; from utils.data_loader import load_listings; L={l['id']:l for l in load_listings()}; [print(i, L[i]['title'], L[i]['price'], price_check(L[i])) for i in ('lst_002','lst_022','lst_004','lst_001')]"
+
+lst_002 Y2K Baby Tee — Butterfly Print 18.0
+{'category': 'tops', 'category_average': 22.0, 'comparable_count': 14, 'percent_vs_average': -18.2, 'price': 18.0, 'verdict': 'below typical'}
+lst_022 90s Leather Bomber — Black 75.0
+{'category': 'outerwear', 'category_average': 39.57, 'comparable_count': 7, 'percent_vs_average': 89.5, 'price': 75.0, 'verdict': 'above typical'}
+lst_004 90s Track Jacket — Navy/White Stripe 45.0
+{'category': 'outerwear', 'category_average': 43.86, 'comparable_count': 7, 'percent_vs_average': 2.6, 'price': 45.0, 'verdict': 'about typical'}
+lst_001 Vintage Levi's 501 Jeans — Medium Wash 38.0
+{'category': 'bottoms', 'category_average': 28.44, 'comparable_count': 9, 'percent_vs_average': 33.6, 'price': 38.0, 'verdict': 'above typical'}
+```
+
+I checked the first by hand: the 14 other tops in `data/listings.json` sum to 308, and 308 / 14 = 22.0, so $18 is 18.2% under. All three verdicts were reached. The empty case, a listing in a category nobody else is in (`category` set to `"hats"`), returned `comparable_count` 0, both averages `None`, and verdict `"no comparison available"`, not an error.
+
+In the loop, on a query that matches:
+
+```
+$ python app.py ask 'vintage graphic tee under $30' --trace
+
+[1] parse_query
+[2] search_listings (via MCP)
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[3] price_check
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: dict with keys: category, price, comparable_count, category_average, percent_vs_average, verdict
+[4] suggest_outfit
+[5] create_fit_card
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+  Price:    below typical for tops — 18% under the $22.00 average
+```
+
+On a query that matches nothing, the run is the same length as before and the new tool never runs:
+
+```
+$ python app.py ask 'designer ballgown size XXS under $5' --trace
+
+[1] parse_query
+[2] search_listings (via MCP)
+      out: [] (empty)
+[3] branch
+      →    search_results empty — stopping before suggest_outfit
+```
+
+Nothing that already worked broke. `python test.py` passed 10 of 10, and I re-ran the whole five-criteria eval with the new tool in the loop (`results/run_2026-11-11_1635_extension.md`, 10 scenarios × 5 tries). `price_check` ran on all 45 tries that completed and on none of the 5 impossible-query tries. Every one of those 5 stopped early, and the other 45 completed. The run file leaves its Verdict column blank, so I counted completions from the trace; I did not re-score the criteria in this table.
+
+**What this does not show:** `price_check` only compares against the 40 listings in `data/listings.json`, so the "typical" price is typical for this data, not for the market. Shoes (4 listings) and accessories (3) are small groups, so their averages move a lot when one listing changes. The fit card and outfit prompts do not use the price verdict. It is shown to the user and nothing more.
 
 ---
 
