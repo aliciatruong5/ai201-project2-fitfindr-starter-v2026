@@ -97,6 +97,52 @@ broken, so the bar is 0 of however many results come back, every time.
 
 ---
 
+## Criteria for the fourth tool, `price_check`
+
+*Criteria 6 to 10 are for `price_check`, which I added after the first five were written and after unit 4. Nothing above this line was changed. These were written after the tool existed, so I ran each check once to make sure it could be measured; the targets below are not loosened to fit what came back.*
+
+---
+
+## 6. Averages and verdicts match the data, including near the edge
+
+For 6 listings — `lst_004` (typical), `lst_022` (far above), `lst_018` (15.3% under, just outside the band), `lst_033` (13.4% under, just inside it), `lst_030` (16.3% over) and `lst_025` (17.7% over), across tops, bottoms and outerwear — `price_check` returns a `category_average` within $0.01 of the average of the *other* listings in that category, recomputed separately from `data/listings.json`, and a `verdict` that matches the 15% rule. 6 of 6, no exceptions.
+
+**Why this target:** The tool is plain arithmetic with no model, so there is no honest reason for it to be right most of the time. What can go wrong is specific: the item counted in its own average, which shifts the number a few percent and flips verdicts near the line, or the wrong operator at the boundary. That is why the six are not random: `lst_018` and `lst_033` sit 0.3 and 1.6 points from the edge on opposite sides. The average has to be recomputed from the raw file, not read back from `price_check`, or the check only proves the tool agrees with itself.
+
+---
+
+## 7. A category with nothing to compare against never raises
+
+For 3 listings whose `category` is changed to one no other listing has (`hats`, `dresses`, `scarves`), `price_check` returns a dict with `comparable_count` 0, `category_average` `None`, `percent_vs_average` `None` and `verdict` `"no comparison available"`. 3 of 3, 0 exceptions.
+
+**Why this target:** An average over zero listings divides by zero, and a tool the loop calls on whatever item search picked must not take the run down because the data has a category with one listing in it. This is the empty case from the Tool Inventory, and the loop branches on it the way it branches on an empty search, so it has to be a normal return, never `None` and never an error. Three different categories because one passing could be luck of the name; none of them is in the data, so they all hit the same path, and 3 of 3 is the bar.
+
+---
+
+## 8. It leaves the item alone and adds no model calls
+
+For 5 listings, after `price_check(item)` the `item` dict is equal to a copy taken before the call, `generate.call_count()` has not changed, and the call takes under 10 ms. 5 of 5.
+
+**Why this target:** `price_check` runs inside the loop, between `search_listings` and `suggest_outfit`, on the same dict that criterion 3 tracks. If it changed `selected_item` even slightly, the item reaching `suggest_outfit` would no longer be the one search picked. It is also meant to be the one step that costs nothing: no model, no network. Zero added model calls is how I check that, and 10 ms is generous for reading a 40-listing file (it measured 0.13 ms), so a time over 10 ms means something slow, like a network call, got in.
+
+---
+
+## 9. In the loop it runs exactly when it should
+
+For 5 queries that match, `session["price_check"]` is set, its `category` and `price` equal those of `session["selected_item"]`, and the trace shows a `price_check` step. For 5 impossible queries, `session["price_check"]` is `None`, the trace has no `price_check` step, and `session["error"]` is set. 10 of 10.
+
+**Why this target:** This is the same kind of bug as criterion 3, state passing between steps through the session. The tool can be right and still be wired wrong: it could be called on the wrong item, or run before the empty-search branch and be given nothing. The impossible half matters as much as the matching half, because a new tool that runs on a run that should have stopped would break criterion 2. It is deterministic wiring, not model behaviour, so a single miss means the loop is wrong and the bar is 10 of 10.
+
+---
+
+## 10. Every listing gets exactly one consistent verdict
+
+Across all 40 listings in `data/listings.json`, `price_check` returns without an exception, `verdict` is one of `"below typical"`, `"about typical"` or `"above typical"`, and the verdict agrees with `percent_vs_average` (below only when under -15.0, above only when over +15.0). 40 of 40, and all three verdicts must appear at least once.
+
+**Why this target:** Criterion 6 checks six chosen listings and a sign or boundary mistake could hide in the other 34. Running every listing is cheap because there is no model, so there is no reason to sample. Requiring all three verdicts to appear guards against a band so wide or so narrow that the tool says the same thing about everything, which would pass every other check and still be useless; on this data the split is 13 below, 15 typical and 12 above. The 15% band is my choice, not something derived from the data, so this criterion tests that the tool follows its rule, not that the rule is right.
+
+---
+
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 4 — read this before you change anything above.
 
