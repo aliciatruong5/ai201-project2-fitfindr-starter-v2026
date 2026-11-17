@@ -539,48 +539,118 @@ Below is a real session from 2026-11-17, run against the project directory with 
 {"ts": "2026-11-17T20:18:01.261+00:00", "event": "ask", "request_id": "a4debf05", "request_number": 9, "query": "corduroy pants size W28", "wardrobe": "example", "wait_ms": 0, "run_ms": 31185, "total_ms": 31185, "model_calls": 2, "prompt_tokens": 391, "output_tokens": 140, "outcome": "completed", "status": 200, "error": null, "results": 1, "selected_item": "lst_005", "price_verdict": "about typical"}
 ```
 
-What the session covers: a match, a no-match that made no model call, an empty body (400), a size filter, two requests sent at once (the second one shows `wait_ms` 4742), a custom wardrobe, an empty wardrobe, and three more plain queries. Three things in it are worth knowing. The empty-wardrobe request logs `"wardrobe": "custom"`, because `{"items": []}` is a dict, so that field cannot tell an empty wardrobe from a real one. `corduroy pants size W28` took 31,185 ms against 1,800 to 6,700 for the others, and I did not investigate why. And two more requests in the same session, with bodies `{"query": 123}` and `[1, 2]`, returned a 500 with a traceback and wrote **no record at all**, which is why they are not in the file (12 requests sent, 10 logged). An earlier session of 8 lines, from before this one, is in `results/serve_run_2026-11-17.jsonl`.
+What the session covers: a match, a no-match that made no model call, an empty body (400), a size filter, two requests sent at once (the second one shows `wait_ms` 4742), a custom wardrobe, an empty wardrobe, and three more plain queries. Three things in it are worth knowing. The empty-wardrobe request logs `"wardrobe": "custom"`, because `{"items": []}` is a dict, so that field cannot tell an empty wardrobe from a real one. `corduroy pants size W28` took 31,185 ms against 1,800 to 6,700 for the others, and I did not investigate why. And two more requests in the same session, with bodies `{"query": 123}` and `[1, 2]`, returned a 500 with a traceback and wrote **no record at all**, which is why they are not in the file (12 requests sent, 10 logged). That is fixed now; see **The Improvement**. An earlier session of 8 lines, from before this one, is in `results/serve_run_2026-11-17.jsonl`.
 
 **What It Costs**
 
 Measured from the log, not estimated. The 8 requests in the session above that ran the full loop each made two model calls (the outfit and the fit card). The 6 that used the example wardrobe used 393, 385, 382, 419, 373 and 391 prompt tokens and 155, 136, 128, 152, 132 and 140 output tokens, which is a mean of 390.5 prompt and 140.5 output tokens per run. The two with a one-item custom wardrobe used far fewer prompt tokens (245 and 247), because the wardrobe is part of the prompt. A search that matches nothing made no model call and cost 0. The cache was off, so none of these tokens were served from cache, and `price_check` adds none because it makes no model call.
 
-At $0.30 per million input tokens and $2.50 per million output tokens for `gemini-3.5-flash-lite`, one completed run with the example wardrobe costs (390.5 × 0.30 + 140.5 × 2.50) / 1,000,000 = about $0.00047. A hundred runs a day is about $0.047 a day, or $1.41 over 30 days, if every one of them completes. Across all 8 completed runs the mean is $0.00045 a run, and an earlier 4-run session gave $0.00048, so the figure holds near $0.0005. The rates come from third-party pricing pages ([anotherwrapper.com](https://anotherwrapper.com/llm-pricing/gemini-3.5-flash-lite), [eesel.ai](https://eesel.ai/blog/gemini-3-5-flash-lite-pricing)), not from Google's own rate sheet, so check them before relying on the dollar figure. Eight runs is still a small sample.
+At $0.30 per million input tokens and $2.50 per million output tokens for `gemini-3.5-flash-lite`, one completed run with the example wardrobe costs:
+
+- Input: 390.5 tokens × $0.30 per million = $0.00011715
+- Output: 140.5 tokens × $2.50 per million = $0.00035125
+- One run: $0.00011715 + $0.00035125 = **$0.0004684**, about $0.00047
+
+**My call on cost:** Money is not the constraint at this size, so I would not spend any effort making runs cheaper. At $0.047 a day there is nothing to save. The limit I would hit first is the call budget, not the dollars: `config.SESSION_REQUEST_BUDGET` is 300 model calls, `generate.py` counts them for the life of the server process and never resets, and a completed run makes two. That is 150 runs, so at a hundred runs a day (200 calls) a server left running would stop answering partway through the second day. I would keep the guard, because it exists to catch a runaway loop, and restart the server each day. I have not changed the budget and I have not made it trip, so this comes from reading the code and the log, not from a failure I saw.
+
+If cost ever did matter, I would cut output before input. Output is 140.5 of the 531 tokens in a run (26%) but $0.00035125 of the $0.0004684 (75%), because it is priced at $2.50 per million against $0.30 for input. So a shorter outfit and fit card would save about three times as much as the same number of tokens trimmed from the prompt.
 
 **Run Log and Verdicts**
 
-Criteria 1 to 5 (the original five) were run with `run_eval.py`, five tries each, with the extension in the loop, in `results/run_2026-11-11_1635_extension.md`: 10 scenarios, 50 tries, 45 completed all the tools and the 5 impossible-query tries all stopped early, with `price_check` running on all 45 and none of the 5. Those runs are earlier than this section and are five tries, not three trials. Criteria 6 to 10 (for `price_check`) were each checked once, on 2026-11-17:
+Criteria 6 to 10 (the five for `price_check` in `criteria.md`) were each run three times in one pass on 2026-11-17, with the model cache off. Criteria 6, 7, 8 and 10 call `tools.py::price_check` directly. Criterion 9 runs `agent.py::run_agent` for 5 matching and 5 impossible queries per trial, so it made real model calls: 30 in total, using 5,928 prompt and 2,148 output tokens. The full output of all three trials is saved in `results/price_check_criteria_trials_2026-11-17.txt`.
 
-| Criterion | Target | Result | Verdict |
-|---|---|---|---|
-| 6. Averages and verdicts match the data | 6 of 6 | 6 of 6, including the two listings nearest the 15% line | MET |
-| 7. No-comparison category never raises | 3 of 3 | 3 of 3 | MET |
-| 8. Leaves the item alone, no model calls, under 10 ms | 5 of 5 | 5 of 5; slowest 0.13 ms | MET |
-| 9. In the loop, runs exactly when it should | 10 of 10 | 10 of 10 | MET |
-| 10. Every listing gets one consistent verdict | 40 of 40, 3 verdicts | 40 of 40; 13 below, 15 typical, 12 above | MET |
+| Criterion | Target | Trial 1 | Trial 2 | Trial 3 | Verdict |
+|---|---|---|---|---|---|
+| 6. Averages and verdicts match the data (`tools.py::price_check`) | 6 of 6 | 6/6 | 6/6 | 6/6 | MET |
+| 7. No-comparison category never raises (`tools.py::price_check`) | 3 of 3 | 3/3 | 3/3 | 3/3 | MET |
+| 8. Item unchanged, no model calls, under 10 ms (`tools.py::price_check`) | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 9. In the loop, runs exactly when it should (`agent.py::run_agent`) | 10 of 10 | 10/10 | 10/10 | 10/10 | MET |
+| 10. Every listing gets one consistent verdict (`tools.py::price_check`) | 40 of 40, 3 verdicts | 40/40 | 40/40 | 40/40 | MET |
 
-No criterion was missed, so there is no stage or mechanism to diagnose. I did not run these three times as the section asks. The tool has no model and no randomness, so I would expect repeats to match, but only criterion 9 touches the model, and I have not shown that.
+**Real output from one trial.** Trial 1, pasted as the run printed it, with the function that produced each criterion's lines named in its heading:
+
+```
+price_check criteria 6-10, 3 trials · 2026-11-17 13:54 · cache off · tools.py::price_check, agent.py::run_agent
+
+===== TRIAL 1 =====
+criterion 6 — tools.py::price_check vs independent average
+  lst_004 outerwear avg  43.86 (want 43.86)  about typical (want about typical) PASS
+  lst_022 outerwear avg  39.57 (want 39.57)  above typical (want above typical) PASS
+  lst_018 outerwear avg  44.86 (want 44.86)  below typical (want below typical) PASS
+  lst_033 tops      avg  21.93 (want 21.93)  about typical (want about typical) PASS
+  lst_030 tops      avg   21.5 (want 21.50)  above typical (want above typical) PASS
+  lst_025 bottoms   avg  28.89 (want 28.89)  above typical (want above typical) PASS
+criterion 7 — tools.py::price_check, category nobody else has
+  hats     -> count 0, average None, percent None, no comparison available  PASS
+  dresses  -> count 0, average None, percent None, no comparison available  PASS
+  scarves  -> count 0, average None, percent None, no comparison available  PASS
+criterion 8 — tools.py::price_check leaves the item alone, no model call, < 10 ms
+  lst_001 unchanged True, model calls +0, 0.122 ms  PASS
+  lst_002 unchanged True, model calls +0, 0.121 ms  PASS
+  lst_003 unchanged True, model calls +0, 0.121 ms  PASS
+  lst_004 unchanged True, model calls +0, 0.120 ms  PASS
+  lst_005 unchanged True, model calls +0, 0.119 ms  PASS
+criterion 9 — agent.py::run_agent, price_check in the loop
+  match      vintage graphic tee under $30              selected lst_002, price_check below typical  PASS
+  match      90s track jacket in size M                 selected lst_004, price_check about typical  PASS
+  match      denim jacket under $50                     selected lst_007, price_check about typical  PASS
+  match      silk slip dress in midi length under $40   selected lst_013, price_check about typical  PASS
+  match      vintage levis 501 jeans under $50          selected lst_001, price_check above typical  PASS
+  impossible designer ballgown size XXS under $5        stopped early, price_check None, no price_check step  PASS
+  impossible wedding tuxedo size XXS under $3           stopped early, price_check None, no price_check step  PASS
+  impossible platinum crown under $2                    stopped early, price_check None, no price_check step  PASS
+  impossible astronaut suit size XXL under $1           stopped early, price_check None, no price_check step  PASS
+  impossible ballgown size XXS under $4                 stopped early, price_check None, no price_check step  PASS
+criterion 10 — tools.py::price_check over all 40 listings: 40/40 consistent, verdicts {'above typical': 12, 'below typical': 13, 'about typical': 15}  PASS
+```
+
+The summary the same run printed after trial 3:
+
+```
+===== SUMMARY =====
+criterion 6  target 6 of 6                 trials ['6/6', '6/6', '6/6']  MET
+criterion 7  target 3 of 3                 trials ['3/3', '3/3', '3/3']  MET
+criterion 8  target 5 of 5                 trials ['5/5', '5/5', '5/5']  MET
+criterion 9  target 10 of 10               trials ['10/10', '10/10', '10/10']  MET
+criterion 10  target 40 of 40, 3 verdicts   trials ['40/40', '40/40', '40/40']  MET
+model calls in this run: 30, tokens {'prompt': 5928, 'output': 2148, 'total': 8076}
+```
+
+No criterion was missed, so there is no stage or mechanism to diagnose. Two things this does not show. The three trials are identical for criteria 6, 7, 8 and 10 because `price_check` is deterministic, so they confirm it is stable rather than testing it three different ways; only criterion 9 involves the model, and its ten runs per trial all passed. And criteria 6 and 10 compare the tool against averages I computed in the same run from `data/listings.json`, so they would not catch a wrong rule in the criterion itself, such as the 15% band being the wrong band.
 
 **The Improvement**
 
-The extension had no miss to fix, so I made no change to it. The most recent measured improvement in this repo is the earlier one, in **The Improvement** above, which changed how criterion 4 is measured. I do not have a second run log for the capstone.
+**What I changed:** One change in `serve.py::ask`. It used to take the request body and `query` on trust, so a body that was not a JSON object, or a `query` that was not a string, crashed on `.get()` or `.strip()` before anything was logged. It now checks that the body is an object and `query` is a non-empty string, and otherwise returns a 400 with the same JSON error and writes a `bad_request` log record that says why (`missing 'query'` or `'query' must be a non-empty string`). Nothing else in the file changed.
+
+**Which diagnosis pointed at it:** The 12-request session in **Instrumentation** above. Two of its requests, `{"query": 123}` and `[1, 2]`, returned a 500 with a traceback and left no log line at all, so the log, which is the only record of what the service did, was silently missing them. The traceback names the mechanism: `'int' object has no attribute 'strip'` and `'list' object has no attribute 'get'`. The stage is the request handler, before the agent runs, so the agent and `price_check` were never involved.
+
+**Measured:** I sent the same 8 malformed bodies to a running server before and after the change, and counted the log lines each one added (the full output is in `results/malformed_bodies_before_after_2026-11-17.md`).
+
+| Target | Before | After | Verdict |
+|---|---|---|---|
+| Every malformed body returns a 4xx JSON error, never a 500 | 4 of 8 | 8 of 8 | MET after, MISSED before |
+| Every malformed body writes exactly one log line | 4 of 8 | 8 of 8 | MET after, MISSED before |
+| Tracebacks in the server output | 4 | 0 | |
+
+The four that failed before were `{"query": 123}`, a list body, a JSON string body, and `{"query": ["a", "b"]}`. The four that already worked (a null `query`, a blank one, a body that is not JSON, and `{}`) still return a 400 with one line each. Normal requests still work after the change: a matching query returned 200 with two model calls and `lst_002`, and an impossible one returned 200 with no model call and no match.
+
+The two targets above are new for this change. I wrote them after the diagnosis, and they are not among criteria 6 to 10, which are about `price_check` and are unaffected, because I did not change the tool or the loop and so did not re-run them. This is one trial each, not three: the check is deterministic, with no model involved. It does not show that every possible bad input is handled. I tested eight bodies, and a body such as a very large one or one with unusual encoding was not tried.
 
 **What's Still Broken**
 
-All five `price_check` criteria (6 to 10) are met, so there is no missed criterion to fix. What is left is gaps I can see but did not close. For each: what I would do, and why I stopped.
+All five `price_check` criteria (6 to 10) are met, so there is no missed criterion to fix. The malformed-body bug found along the way is fixed (see The Improvement). What is left is gaps I can see but did not close. For each: what I would do, and why I stopped.
 
-- **`serve.py` and malformed bodies.** I sent it `{"query": 123}` and a body that is a JSON list, and both returned a 500 with a traceback and no log line (`'int' object has no attribute 'strip'` and `'list' object has no attribute 'get'`). I would check the body's type before using it, return a 400, and log the request like any other. I have not tried a `wardrobe` that is a string. I stopped because I found it while collecting the log record and did not go on to fix it.
 - **"Typical" only means typical for these 40 listings.** Shoes (4 listings) and accessories (3) give shaky averages. I would compare against more data, or narrow the comparison by condition as well as category. I stopped because the project's data is all there is to compare against; I have no source of real market prices.
 - **The 15% band is my choice.** I would set it from the spread of prices in each category instead of one fixed number. I stopped because there is nothing to tune it against, and a band picked to fit these 40 listings would just fit noise.
 - **The price verdict is only printed.** The outfit and fit card prompts do not use it. I would add it to the fit card prompt and check, as criterion 4 does, that the card still mentions price and platform exactly once. I stopped because this extension was meant to be one tool, and changing a prompt is a second change.
-- **The log cannot tell an empty wardrobe from a custom one, and it misses the 500s.** `{"items": []}` logs as `"wardrobe": "custom"`, and a request that crashes before the log call writes nothing. I would log a `wardrobe` of `empty` when `items` is empty, and wrap the whole handler so a crash still logs an `error` record. I stopped because the first is a small label and the second is the same fix as the malformed-body item above.
+- **The log cannot tell an empty wardrobe from a custom one, and it can still miss a crash.** `{"items": []}` logs as `"wardrobe": "custom"`. The malformed-body crash is fixed (see The Improvement), but any other exception raised before the log call would still write nothing. I would log `empty` when `items` is empty, and wrap the whole handler so any crash writes an `error` record. I stopped because I only found and fixed the one crash I had evidence for, and I have no other crash to point at.
 - **Criterion 1's 4-of-5 target is untested against the search.** Both runs hit the same item 5 of 5 on one query, which tests the model's wording variation and not the search's. I would run five differently phrased queries (for example "worn-in denim" against "vintage jeans") to find where keyword overlap misses. I stopped because deciding what counts as a match for a loosely phrased query is a judgment I had not made.
 - **`ModelUnavailable` is not caught around `search_listings`.** It goes through MCP, so a bad key there would surface as an uncaught `MCPError`. I would catch it in `run_agent` and set `session["error"]`. I stopped because I had only tested the failure on `suggest_outfit`.
 - **`parse_query` is only proven on about 9 phrasings.** An unusual phrasing ("around fifty dollars") would likely misparse silently. I would add the phrasings I can think of as tests. I stopped because none of my criteria exercise it.
 
-**The one thing I'd do first:** test `serve.py` with a malformed body. It is a confirmed bug in something a user could actually hit, it also leaves no log line behind, and the fix is a type check at the top of the handler.
+**The one thing I'd do first:** wrap the whole `ask` handler so that any crash still writes an `error` log record. The malformed-body fix showed that the log is the only record of what the service did, and it silently lost the two requests that crashed. This makes that impossible for crashes I have not found yet, it is a few lines, and it needs no new data.
 
-**The target I'd tighten:** criterion 8's time limit, from 10 ms to 1 ms. The slowest call measured 0.13 ms, so 10 ms leaves about 75 times the headroom, and a slow bug such as re-reading the data file on every call would still pass. I would first confirm that the very first call after startup, which has to read the file, also stays under 1 ms, since I only measured warm calls.
+**The target I'd tighten:** criterion 8's time limit, from 10 ms to 1 ms. The slowest of the 15 calls in the three trials measured 0.158 ms, so 10 ms leaves about 60 times the headroom, and a slow bug such as re-reading the data file on every call would still pass. I would first confirm that the very first call after startup, which has to read the file, also stays under 1 ms, since I only measured warm calls.
 
 **How I Used AI**
 

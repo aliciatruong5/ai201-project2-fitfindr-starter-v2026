@@ -1,0 +1,103 @@
+  [rate limit] 15 requests used this minute. Waiting 35s. This is normal.
+price_check criteria 6-10, 3 trials · 2026-11-17 13:54 · cache off · tools.py::price_check, agent.py::run_agent
+
+===== TRIAL 1 =====
+criterion 6 — tools.py::price_check vs independent average
+  lst_004 outerwear avg  43.86 (want 43.86)  about typical (want about typical) PASS
+  lst_022 outerwear avg  39.57 (want 39.57)  above typical (want above typical) PASS
+  lst_018 outerwear avg  44.86 (want 44.86)  below typical (want below typical) PASS
+  lst_033 tops      avg  21.93 (want 21.93)  about typical (want about typical) PASS
+  lst_030 tops      avg   21.5 (want 21.50)  above typical (want above typical) PASS
+  lst_025 bottoms   avg  28.89 (want 28.89)  above typical (want above typical) PASS
+criterion 7 — tools.py::price_check, category nobody else has
+  hats     -> count 0, average None, percent None, no comparison available  PASS
+  dresses  -> count 0, average None, percent None, no comparison available  PASS
+  scarves  -> count 0, average None, percent None, no comparison available  PASS
+criterion 8 — tools.py::price_check leaves the item alone, no model call, < 10 ms
+  lst_001 unchanged True, model calls +0, 0.122 ms  PASS
+  lst_002 unchanged True, model calls +0, 0.121 ms  PASS
+  lst_003 unchanged True, model calls +0, 0.121 ms  PASS
+  lst_004 unchanged True, model calls +0, 0.120 ms  PASS
+  lst_005 unchanged True, model calls +0, 0.119 ms  PASS
+criterion 9 — agent.py::run_agent, price_check in the loop
+  match      vintage graphic tee under $30              selected lst_002, price_check below typical  PASS
+  match      90s track jacket in size M                 selected lst_004, price_check about typical  PASS
+  match      denim jacket under $50                     selected lst_007, price_check about typical  PASS
+  match      silk slip dress in midi length under $40   selected lst_013, price_check about typical  PASS
+  match      vintage levis 501 jeans under $50          selected lst_001, price_check above typical  PASS
+  impossible designer ballgown size XXS under $5        stopped early, price_check None, no price_check step  PASS
+  impossible wedding tuxedo size XXS under $3           stopped early, price_check None, no price_check step  PASS
+  impossible platinum crown under $2                    stopped early, price_check None, no price_check step  PASS
+  impossible astronaut suit size XXL under $1           stopped early, price_check None, no price_check step  PASS
+  impossible ballgown size XXS under $4                 stopped early, price_check None, no price_check step  PASS
+criterion 10 — tools.py::price_check over all 40 listings: 40/40 consistent, verdicts {'above typical': 12, 'below typical': 13, 'about typical': 15}  PASS
+
+===== TRIAL 2 =====
+criterion 6 — tools.py::price_check vs independent average
+  lst_004 outerwear avg  43.86 (want 43.86)  about typical (want about typical) PASS
+  lst_022 outerwear avg  39.57 (want 39.57)  above typical (want above typical) PASS
+  lst_018 outerwear avg  44.86 (want 44.86)  below typical (want below typical) PASS
+  lst_033 tops      avg  21.93 (want 21.93)  about typical (want about typical) PASS
+  lst_030 tops      avg   21.5 (want 21.50)  above typical (want above typical) PASS
+  lst_025 bottoms   avg  28.89 (want 28.89)  above typical (want above typical) PASS
+criterion 7 — tools.py::price_check, category nobody else has
+  hats     -> count 0, average None, percent None, no comparison available  PASS
+  dresses  -> count 0, average None, percent None, no comparison available  PASS
+  scarves  -> count 0, average None, percent None, no comparison available  PASS
+criterion 8 — tools.py::price_check leaves the item alone, no model call, < 10 ms
+  lst_001 unchanged True, model calls +0, 0.122 ms  PASS
+  lst_002 unchanged True, model calls +0, 0.119 ms  PASS
+  lst_003 unchanged True, model calls +0, 0.158 ms  PASS
+  lst_004 unchanged True, model calls +0, 0.119 ms  PASS
+  lst_005 unchanged True, model calls +0, 0.118 ms  PASS
+criterion 9 — agent.py::run_agent, price_check in the loop
+  match      vintage graphic tee under $30              selected lst_002, price_check below typical  PASS
+  match      90s track jacket in size M                 selected lst_004, price_check about typical  PASS
+  match      denim jacket under $50                     selected lst_007, price_check about typical  PASS
+  match      silk slip dress in midi length under $40   selected lst_013, price_check about typical  PASS
+  match      vintage levis 501 jeans under $50          selected lst_001, price_check above typical  PASS
+  impossible designer ballgown size XXS under $5        stopped early, price_check None, no price_check step  PASS
+  impossible wedding tuxedo size XXS under $3           stopped early, price_check None, no price_check step  PASS
+  impossible platinum crown under $2                    stopped early, price_check None, no price_check step  PASS
+  impossible astronaut suit size XXL under $1           stopped early, price_check None, no price_check step  PASS
+  impossible ballgown size XXS under $4                 stopped early, price_check None, no price_check step  PASS
+criterion 10 — tools.py::price_check over all 40 listings: 40/40 consistent, verdicts {'above typical': 12, 'below typical': 13, 'about typical': 15}  PASS
+
+===== TRIAL 3 =====
+criterion 6 — tools.py::price_check vs independent average
+  lst_004 outerwear avg  43.86 (want 43.86)  about typical (want about typical) PASS
+  lst_022 outerwear avg  39.57 (want 39.57)  above typical (want above typical) PASS
+  lst_018 outerwear avg  44.86 (want 44.86)  below typical (want below typical) PASS
+  lst_033 tops      avg  21.93 (want 21.93)  about typical (want about typical) PASS
+  lst_030 tops      avg   21.5 (want 21.50)  above typical (want above typical) PASS
+  lst_025 bottoms   avg  28.89 (want 28.89)  above typical (want above typical) PASS
+criterion 7 — tools.py::price_check, category nobody else has
+  hats     -> count 0, average None, percent None, no comparison available  PASS
+  dresses  -> count 0, average None, percent None, no comparison available  PASS
+  scarves  -> count 0, average None, percent None, no comparison available  PASS
+criterion 8 — tools.py::price_check leaves the item alone, no model call, < 10 ms
+  lst_001 unchanged True, model calls +0, 0.126 ms  PASS
+  lst_002 unchanged True, model calls +0, 0.119 ms  PASS
+  lst_003 unchanged True, model calls +0, 0.119 ms  PASS
+  lst_004 unchanged True, model calls +0, 0.118 ms  PASS
+  lst_005 unchanged True, model calls +0, 0.126 ms  PASS
+criterion 9 — agent.py::run_agent, price_check in the loop
+  match      vintage graphic tee under $30              selected lst_002, price_check below typical  PASS
+  match      90s track jacket in size M                 selected lst_004, price_check about typical  PASS
+  match      denim jacket under $50                     selected lst_007, price_check about typical  PASS
+  match      silk slip dress in midi length under $40   selected lst_013, price_check about typical  PASS
+  match      vintage levis 501 jeans under $50          selected lst_001, price_check above typical  PASS
+  impossible designer ballgown size XXS under $5        stopped early, price_check None, no price_check step  PASS
+  impossible wedding tuxedo size XXS under $3           stopped early, price_check None, no price_check step  PASS
+  impossible platinum crown under $2                    stopped early, price_check None, no price_check step  PASS
+  impossible astronaut suit size XXL under $1           stopped early, price_check None, no price_check step  PASS
+  impossible ballgown size XXS under $4                 stopped early, price_check None, no price_check step  PASS
+criterion 10 — tools.py::price_check over all 40 listings: 40/40 consistent, verdicts {'above typical': 12, 'below typical': 13, 'about typical': 15}  PASS
+
+===== SUMMARY =====
+criterion 6  target 6 of 6                 trials ['6/6', '6/6', '6/6']  MET
+criterion 7  target 3 of 3                 trials ['3/3', '3/3', '3/3']  MET
+criterion 8  target 5 of 5                 trials ['5/5', '5/5', '5/5']  MET
+criterion 9  target 10 of 10               trials ['10/10', '10/10', '10/10']  MET
+criterion 10  target 40 of 40, 3 verdicts   trials ['40/40', '40/40', '40/40']  MET
+model calls in this run: 30, tokens {'prompt': 5928, 'output': 2148, 'total': 8076}
