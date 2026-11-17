@@ -27,15 +27,19 @@ web server has to be. The reason is worth reading before you deploy: see the
 note above `_one_at_a_time` below — it also decides which gunicorn worker you
 can use.
 
-⚠️ There is deliberately NO logging, NO timing and NO request counting in this
-file. That is unit 9's follow-along: you instrument this yourself, first, and
-then deploy it. A structured log you were handed teaches you nothing about
-what belongs in one — and the timing field is the one everybody skips.
+Logging: every request to /ask writes one JSON line — to stderr and to
+logs/serve.jsonl — with a request id, a running request count, the query, the
+outcome, and timing split into time spent waiting for its turn and time spent
+running the agent. See `_log` and the "Logging" notes in RUNNING.md.
 """
 
+import json
 import os
 import sys
 import threading
+import time
+import uuid
+from datetime import datetime, timezone
 
 # config first, and before anything that talks to the model: it loads your .env
 # and fixes the Windows console encoding for every module that imports it.
@@ -43,10 +47,33 @@ import config  # noqa: F401
 
 from flask import Flask, jsonify, request
 
+import generate
 from agent import run_agent
 from utils.data_loader import get_example_wardrobe
 
 app = Flask(__name__)
+
+
+# ── structured log ────────────────────────────────────────────────────────────
+# One JSON object per line. stderr is what a host captures; the file is what
+# you read back and commit. A log write that fails must never fail the request.
+
+LOG_FILE = config.ROOT / "logs" / "serve.jsonl"
+_request_count = 0
+
+
+def _log(event: dict) -> None:
+    line = json.dumps(
+        {"ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"), **event},
+        ensure_ascii=False,
+    )
+    print(line, file=sys.stderr, flush=True)
+    try:
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 # ── one request at a time ─────────────────────────────────────────────────────
@@ -107,27 +134,31 @@ def ask():
                                                 example wardrobe the CLI uses.
     Out:  the session dict from run_agent(), as JSON.
     """
+    global _request_count
+    started = time.monotonic()
+    request_id = uuid.uuid4().hex[:8]
+
     payload = request.get_json(silent=True) or {}
     query = (payload.get("query") or "").strip()
     if not query:
         # 400 rather than a stack trace: the caller can act on this one.
+        _log({"event": "ask", "request_id": request_id, "outcome": "bad_request",
+              "status": 400, "reason": "missing 'query'",
+              "total_ms": round((time.monotonic() - started) * 1000)})
         return jsonify({"error": "Send JSON with a 'query' field, e.g. "
                                  '{"query": "vintage graphic tee under $30"}'}), 400
 
-    wardrobe = payload.get("wardrobe")
-    if not isinstance(wardrobe, dict):
-        wardrobe = get_example_wardrobe()
+    custom_wardrobe = isinstance(payload.get("wardrobe"), dict)
+    wardrobe = payload["wardrobe"] if custom_wardrobe else get_example_wardrobe()
 
     # A queued request should look like a queued request. Without this the
     # second caller just sits there, and "slow" and "waiting its turn" are
     # indistinguishable from the outside — which is how people conclude the
     # deployment is broken when it is behaving exactly as designed.
     #
-    # This is NOT the logging you add in the follow-along. It prints nothing
-    # on the normal path, carries no timing and counts nothing; it says only
-    # that this request had to wait. `locked()` can be a moment out of date,
-    # so the note is occasionally missed — which costs nothing, because
-    # nothing depends on it.
+    # `locked()` can be a moment out of date, so the note is occasionally
+    # missed — which costs nothing, because nothing depends on it. The log
+    # line's wait_ms is the exact number.
     if _one_at_a_time.locked():
         print(
             "  [serve] another request is still running. This one is waiting "
@@ -138,17 +169,52 @@ def ask():
 
     failure = None
     session = None
+    waited_from = time.monotonic()
     with _one_at_a_time:
+        run_from = time.monotonic()
+        _request_count += 1
+        number = _request_count
+        calls_before = generate.call_count()
+        tokens_before = generate.token_counts()
         try:
             session = run_agent(query, wardrobe)
         except Exception as exc:  # noqa: BLE001 — a 500 with a sentence beats a hang
             failure = f"{type(exc).__name__}: {exc}"
+        run_ended = time.monotonic()
+        calls = generate.call_count() - calls_before
+        tokens = generate.token_counts()
+
+    record = {
+        "event": "ask",
+        "request_id": request_id,
+        "request_number": number,
+        "query": query,
+        "wardrobe": "custom" if custom_wardrobe else "example",
+        "wait_ms": round((run_from - waited_from) * 1000),
+        "run_ms": round((run_ended - run_from) * 1000),
+        "total_ms": round((time.monotonic() - started) * 1000),
+        "model_calls": calls,
+        "prompt_tokens": tokens["prompt"] - tokens_before["prompt"],
+        "output_tokens": tokens["output"] - tokens_before["output"],
+    }
 
     # Outside the lock: building a response is not work the next caller should
     # be waiting on.
     if failure is not None:
+        _log({**record, "outcome": "error", "status": 500, "error": failure})
         return jsonify({"error": failure}), 500
 
+    item = session.get("selected_item") or {}
+    check = session.get("price_check") or {}
+    _log({
+        **record,
+        "outcome": "no_match" if session.get("error") else "completed",
+        "status": 200,
+        "error": session.get("error"),
+        "results": len(session.get("search_results") or []),
+        "selected_item": item.get("id"),
+        "price_verdict": check.get("verdict"),
+    })
     return jsonify(session)
 
 
@@ -172,6 +238,9 @@ if __name__ == "__main__":
         f"    -H 'Content-Type: application/json' \\\n"
         f"    -d '{{\"query\": \"vintage graphic tee under $30\"}}'\n"
     )
+    print(f"Logging every request to {LOG_FILE.relative_to(config.ROOT)} (and stderr).")
     print("Ctrl-C to stop.\n")
+    _log({"event": "start", "port": port, "debug": debug,
+          "python": sys.version.split()[0], "model": config.MODEL})
 
     app.run(host="0.0.0.0", port=port, debug=debug)
