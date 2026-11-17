@@ -155,6 +155,24 @@ the point of the session.
 
 ---
 
+## The run path
+
+**There is no URL.** FitFindr is not deployed. It runs on my machine, started by one command, and both the command and the environment it needs were tested from a clean copy of the project on 2026-11-17.
+
+**The start command:**
+
+```bash
+PORT=5001 python serve.py
+```
+
+It then answers at `http://localhost:5001` (`POST /ask`, `GET /health`).
+
+**How it got there**, from a fresh checkout: `python3 -m venv .venv`, `source .venv/bin/activate`, `pip install -r requirements.txt`, `cp .env.example .env` and paste a Gemini key in, then the command above. Every step with its output is under **Run it locally, with logs** below.
+
+**What the environment needs:** Python 3.11 to 3.13 (tested on 3.13.13), the packages in `requirements.txt`, a `GEMINI_API_KEY` in `.env`, and internet access. No model files: the model runs on Google's servers. The full table, with the versions that installed, is below.
+
+---
+
 ## Run it locally, with logs
 
 This is the whole thing, from a fresh checkout. I tested it exactly like this
