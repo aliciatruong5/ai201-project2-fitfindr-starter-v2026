@@ -18,7 +18,7 @@ import re
 import config
 import trace
 from mcp_client import call_tool
-from tools import suggest_outfit, create_fit_card
+from tools import suggest_outfit, create_fit_card, price_check
 from generate import ModelUnavailable
 
 
@@ -74,6 +74,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "search_results": [],        # everything search_listings returned
         "selected_item": None,       # the one you chose — goes into suggest_outfit
         "wardrobe": wardrobe,        # the user's wardrobe
+        "price_check": None,         # what price_check returned for the selected item
         "outfit_suggestion": None,   # what suggest_outfit returned
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
@@ -172,6 +173,13 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     count += 1
     trace.check_iterations(count)
+    session["price_check"] = price_check(session["selected_item"])
+    trace.step(
+        "price_check", inputs=session["selected_item"], returned=session["price_check"]
+    )
+
+    count += 1
+    trace.check_iterations(count)
     try:
         session["outfit_suggestion"] = suggest_outfit(
             session["selected_item"], session["wardrobe"]
@@ -207,6 +215,17 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
 # ── running it directly ───────────────────────────────────────────────────────
 
+def _price_line(check: dict | None) -> str:
+    if not check or check["category_average"] is None:
+        return "no comparison available"
+    pct = check["percent_vs_average"]
+    return (
+        f"{check['verdict']} for {check['category']} — "
+        f"{abs(pct):.0f}% {'under' if pct < 0 else 'over'} the "
+        f"${check['category_average']:.2f} average"
+    )
+
+
 def _show(session: dict) -> None:
     if session["error"]:
         print(f"  stopped: {session['error']}")
@@ -215,6 +234,7 @@ def _show(session: dict) -> None:
 
     item = session["selected_item"] or {}
     print(f"  found:    {item.get('title')} — ${item.get('price')} on {item.get('platform')}")
+    print(f"  price:    {_price_line(session['price_check'])}")
     print(f"  outfit:   {session['outfit_suggestion']}")
     print(f"  fit card: {session['fit_card']}")
 
