@@ -123,6 +123,71 @@ def search_listings(
     return [listing for _, listing in scored[: config.SEARCH_RESULT_LIMIT]]
 
 
+# ── Tool 4: price_check ───────────────────────────────────────────────────────
+
+# Within this fraction of the category average counts as "about typical".
+PRICE_TYPICAL_BAND = 0.15
+
+
+def price_check(new_item: dict) -> dict:
+    """
+    Say whether a listing is cheap, typical, or pricey for its category.
+
+    Compares the item's price with the average price of every OTHER listing in
+    the same category (tops, bottoms, outerwear, shoes, accessories). It does
+    not call the model.
+
+    Args:
+        new_item: a listing dict — needs `id`, `category` and `price`.
+
+    Returns:
+        A dict with:
+            category          (str)   the item's category
+            price             (float) the item's price
+            comparable_count  (int)   how many other listings were compared
+            category_average  (float or None) their average price, 2 decimals
+            percent_vs_average (float or None) item vs that average, signed,
+                              1 decimal (-25.0 means 25% under)
+            verdict           (str)   "below typical", "about typical" (within
+                              15% of the average), "above typical", or
+                              "no comparison available"
+        **When there is nothing to compare against** (no other listing in that
+        category) it still returns a dict — comparable_count 0, the average and
+        percent None, verdict "no comparison available". Never None, never an
+        exception.
+    """
+    others = [
+        listing["price"]
+        for listing in load_listings()
+        if listing["category"] == new_item["category"] and listing["id"] != new_item["id"]
+    ]
+    result = {
+        "category": new_item["category"],
+        "price": new_item["price"],
+        "comparable_count": len(others),
+        "category_average": None,
+        "percent_vs_average": None,
+        "verdict": "no comparison available",
+    }
+    if not others:
+        return result
+
+    average = sum(others) / len(others)
+    percent = (new_item["price"] - average) / average * 100
+    if percent < -PRICE_TYPICAL_BAND * 100:
+        verdict = "below typical"
+    elif percent > PRICE_TYPICAL_BAND * 100:
+        verdict = "above typical"
+    else:
+        verdict = "about typical"
+    result.update(
+        category_average=round(average, 2),
+        percent_vs_average=round(percent, 1),
+        verdict=verdict,
+    )
+    return result
+
+
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
 
 def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
