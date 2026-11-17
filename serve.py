@@ -138,12 +138,19 @@ def ask():
     started = time.monotonic()
     request_id = uuid.uuid4().hex[:8]
 
-    payload = request.get_json(silent=True) or {}
-    query = (payload.get("query") or "").strip()
+    # The body can be any JSON value, and `query` any type. Check both before
+    # using them: a number or a list has no .strip(), and a list body has no
+    # .get(), so without this they crashed here, before anything was logged.
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    raw_query = payload.get("query")
+    query = raw_query.strip() if isinstance(raw_query, str) else ""
     if not query:
         # 400 rather than a stack trace: the caller can act on this one.
         _log({"event": "ask", "request_id": request_id, "outcome": "bad_request",
-              "status": 400, "reason": "missing 'query'",
+              "status": 400,
+              "reason": "missing 'query'" if raw_query is None else "'query' must be a non-empty string",
               "total_ms": round((time.monotonic() - started) * 1000)})
         return jsonify({"error": "Send JSON with a 'query' field, e.g. "
                                  '{"query": "vintage graphic tee under $30"}'}), 400
