@@ -155,6 +155,63 @@ the point of the session.
 
 ---
 
+## Run it locally, with logs
+
+This is the whole thing, from a fresh checkout. I tested it exactly like this
+on 2026-11-17, in a new directory with a new virtualenv, on macOS with
+Python 3.13.13.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # then replace your_key_here with your Gemini key
+python test.py                  # 10 passed, 0 failed
+PORT=5001 python serve.py       # the command that starts it
+```
+
+Then, in a second terminal:
+
+```bash
+curl -X POST http://localhost:5001/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "vintage graphic tee under $30"}'
+```
+
+**Why `PORT=5001`.** `serve.py` falls back to port 5000, and on a Mac that port
+is held by AirPlay Receiver, so plain `python serve.py` stops with "Address
+already in use". Either use another port as above, or turn AirPlay Receiver
+off in System Settings and run `python serve.py`.
+
+**The logs.** Every `/ask` request writes one JSON object per line, to the
+terminal (stderr) and to `logs/serve.jsonl` (created on first use, not
+committed). The fields:
+
+| Field | Meaning |
+|---|---|
+| `ts` | UTC time the line was written |
+| `request_id`, `request_number` | a short id, and a count of agent runs since start |
+| `query`, `wardrobe` | what was asked, and whether the example wardrobe was used |
+| `wait_ms`, `run_ms`, `total_ms` | time queued behind another request, time in the agent, time overall |
+| `model_calls`, `prompt_tokens`, `output_tokens` | what this one request spent |
+| `outcome`, `status` | `completed`, `no_match`, `bad_request` or `error`, and the HTTP status |
+| `results`, `selected_item`, `price_verdict` | how many listings matched, which was picked, and what `price_check` said |
+
+A real session is committed as `results/serve_run_2026-11-17.jsonl` and pasted
+in the README under **Local Run**.
+
+**What the environment needs**
+
+| Need | Detail |
+|---|---|
+| Python | 3.11, 3.12 or 3.13 (not 3.14). Tested on 3.13.13 |
+| Dependencies | `requirements.txt`, which pins a lower and an upper bound for each. The versions that installed: python-dotenv 1.1.1, google-genai 1.75.0, mcp 1.30.0, Flask 3.1.3, gunicorn 23.0.0 (gunicorn is only for a host, not for the command above) |
+| Model files | None. The model (`gemini-3.5-flash-lite`) runs on Google's servers, nothing is downloaded, and there is no GPU or local model. The virtualenv with everything installed is 74 MB |
+| Network and key | Internet access, and `GEMINI_API_KEY` in `.env`. Without a key `serve.py` starts, but `/ask` fails on the first model call |
+| Port | `PORT` environment variable, default 5000 |
+
+---
+
 ## Where everything lives
 
 | File | What it does |

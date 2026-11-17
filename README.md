@@ -568,6 +568,37 @@ Nothing that already worked broke. `python test.py` passed 10 of 10, and I re-ra
 
 ---
 
+## Local Run
+
+**Start command** (full steps and what each log field means are in [RUNNING.md](RUNNING.md#run-it-locally-with-logs)):
+
+```bash
+PORT=5001 python serve.py
+```
+
+I tested it from a clean copy of the project: a new directory, a new virtualenv, `pip install -r requirements.txt`, `python test.py` (10 passed, 0 failed), then the command above. Two things that test turned up. On a Mac, `python serve.py` alone fails with "Address already in use", because AirPlay Receiver holds port 5000, which is why the command sets `PORT=5001`. And `.env.example` was missing from the repo (my commit `ab9799f` deleted it), so the `cp .env.example .env` step in RUNNING.md failed until I restored it.
+
+**Environment:** Python 3.13.13 (3.11 to 3.13 supported, not 3.14). The pinned dependencies installed as python-dotenv 1.1.1, google-genai 1.75.0, mcp 1.30.0, Flask 3.1.3 and gunicorn 23.0.0. There are no model files: the model (`gemini-3.5-flash-lite`) runs on Google's servers, so nothing is downloaded, and the whole virtualenv is 74 MB. It needs internet and `GEMINI_API_KEY`.
+
+**Run record.** A real session against that clean copy: one query that matches, one that matches nothing, a request with no `query`, a size-filtered query, and two requests sent at the same moment. The raw file is committed as `results/serve_run_2026-11-17.jsonl` and is pasted here unedited:
+
+```json
+{"ts": "2026-11-17T19:40:50.804+00:00", "event": "start", "port": 5001, "debug": false, "python": "3.13.13", "model": "gemini-3.5-flash-lite"}
+{"ts": "2026-11-17T19:41:00.767+00:00", "event": "ask", "request_id": "b0f1a1b3", "request_number": 1, "query": "vintage graphic tee under $30", "wardrobe": "example", "wait_ms": 0, "run_ms": 2987, "total_ms": 2988, "model_calls": 2, "prompt_tokens": 388, "output_tokens": 139, "outcome": "completed", "status": 200, "error": null, "results": 10, "selected_item": "lst_002", "price_verdict": "below typical"}
+{"ts": "2026-11-17T19:41:01.122+00:00", "event": "ask", "request_id": "78e16743", "request_number": 2, "query": "designer ballgown size XXS under $5", "wardrobe": "example", "wait_ms": 0, "run_ms": 339, "total_ms": 340, "model_calls": 0, "prompt_tokens": 0, "output_tokens": 0, "outcome": "no_match", "status": 200, "error": "No listings matched that search. Try loosening the price ceiling, dropping the size filter, or using broader keywords.", "results": 0, "selected_item": null, "price_verdict": null}
+{"ts": "2026-11-17T19:41:01.133+00:00", "event": "ask", "request_id": "7ea07d08", "outcome": "bad_request", "status": 400, "reason": "missing 'query'", "total_ms": 0}
+{"ts": "2026-11-17T19:41:04.322+00:00", "event": "ask", "request_id": "c81da56e", "request_number": 3, "query": "90s track jacket in size M", "wardrobe": "example", "wait_ms": 0, "run_ms": 3181, "total_ms": 3181, "model_calls": 2, "prompt_tokens": 387, "output_tokens": 139, "outcome": "completed", "status": 200, "error": null, "results": 4, "selected_item": "lst_004", "price_verdict": "about typical"}
+{"ts": "2026-11-17T19:41:06.823+00:00", "event": "ask", "request_id": "585a21e2", "request_number": 4, "query": "denim jacket under $50", "wardrobe": "example", "wait_ms": 0, "run_ms": 2488, "total_ms": 2489, "model_calls": 2, "prompt_tokens": 382, "output_tokens": 130, "outcome": "completed", "status": 200, "error": null, "results": 7, "selected_item": "lst_007", "price_verdict": "about typical"}
+{"ts": "2026-11-17T19:41:11.393+00:00", "event": "ask", "request_id": "c1ac343d", "request_number": 5, "query": "silk slip dress in midi length under $40", "wardrobe": "example", "wait_ms": 1973, "run_ms": 4570, "total_ms": 6543, "model_calls": 2, "prompt_tokens": 417, "output_tokens": 166, "outcome": "completed", "status": 200, "error": null, "results": 10, "selected_item": "lst_013", "price_verdict": "about typical"}
+{"ts": "2026-11-17T19:41:39.742+00:00", "event": "start", "port": 5000, "debug": false, "python": "3.13.13", "model": "gemini-3.5-flash-lite"}
+```
+
+How to read it: request 1 completed with two model calls (the outfit and the fit card), picked `lst_002`, and `price_check` called it below typical. Request 2 matched nothing and made zero model calls, so `no_match` is also the cheapest outcome. The bad request logged a 400 with no model call and no request number, because it never reached the agent. The last two are the overlap: "denim jacket" ran immediately (`wait_ms` 0) and "silk slip dress" arrived half a second later and waited 1,973 ms for its turn, then ran for 4,570 ms, for 6,543 ms in total. That is the one-at-a-time lock in `serve.py` working, and the queue message printed once on the terminal.
+
+What the log does not show: every request used the example wardrobe, so the `custom` wardrobe path was never exercised. All six agent runs succeeded, so there is no `error` outcome (an HTTP 500) in the record. The first request (2,987 ms) was no slower than the later completed ones (2,488 to 3,181 ms), so this run shows no cold-start cost.
+
+---
+
 ## What's Still Broken
 
 <!-- For each criterion still missed: what you'd do, and why you stopped where
