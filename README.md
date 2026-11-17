@@ -568,6 +568,36 @@ Nothing that already worked broke. `python test.py` passed 10 of 10, and I re-ra
 
 ---
 
+## The Run Path
+
+**There is no URL.** FitFindr is not deployed. It runs on my machine, and the path to it is a start command and the environment it needs, both of which I tested from a clean copy of the project on 2026-11-17.
+
+**How it gets there, from a fresh checkout:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env            # then replace your_key_here with a Gemini key
+PORT=5001 python serve.py       # the start command
+```
+
+It then answers at `http://localhost:5001`: `POST /ask` with `{"query": "..."}` runs the agent, and `GET /health` returns `{"status": "ok"}`.
+
+**What it needs:**
+
+| Need | Detail |
+|---|---|
+| Python | 3.11 to 3.13 (not 3.14). Tested on 3.13.13 |
+| Packages | From `requirements.txt`; the versions that installed were python-dotenv 1.1.1, google-genai 1.75.0, mcp 1.30.0, Flask 3.1.3, gunicorn 23.0.0 |
+| Model files | None. `gemini-3.5-flash-lite` runs on Google's servers; nothing is downloaded and the virtualenv is 74 MB |
+| Key and network | `GEMINI_API_KEY` in `.env` (never committed) and internet access |
+| Port | The `PORT` variable. On a Mac, port 5000 is taken by AirPlay Receiver, so `PORT=5001` is needed there |
+
+The same steps with the log fields explained are in [RUNNING.md](RUNNING.md#run-it-locally-with-logs), and the real session that came out of it is under **Local Run** below.
+
+---
+
 ## Local Run
 
 **Start command** (full steps and what each log field means are in [RUNNING.md](RUNNING.md#run-it-locally-with-logs)):
